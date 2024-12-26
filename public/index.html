@@ -22,6 +22,9 @@
         cursor: pointer;
         transition: background-color 0.3s ease;">Xem Thống Kê</a>
 
+        <button id="openDoorBtn"
+            style="padding: 8px 12px; background-color: #0078d4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background-color 0.3s ease;">Mở
+            Cửa</button>
     </div>
     <div class="container">
         <div class="left-panel">
@@ -179,6 +182,22 @@
         // Khởi động fetch users và logs khi load trang
         fetchUsers();
         fetchLogs();
+        document.getElementById('openDoorBtn').addEventListener('click', async () => {
+            const response = await fetch('/open-door-manually', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ pinCode: '1234' }) // Gửi mã PIN nếu cần
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                Swal.fire('Thành công!', data.message, 'success');
+            } else {
+                Swal.fire('Lỗi!', data.message || 'Không thể mở cửa', 'error');
+            }
+        });
     </script>
 </body>
 
