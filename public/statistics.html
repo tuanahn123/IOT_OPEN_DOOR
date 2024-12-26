@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thống Kê Cửa Thông Minh</title>
+    <link rel="stylesheet" href="./index.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <h1 class="text-center mt-5" style="font-weight: 600;">Thống Kê Sử Dụng</h1>
+    <div class="bg-white p-4 container" style="border-radius: 12px; flex-direction: column;">
+
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <h3>Số lượng người dùng: <span id="userCount"></span></h3>
+                <h3>Số lần mở cửa: <span id="accessCount"></span></h3>
+            </div>
+            <div class="col-md-6">
+                <label for="timePeriod">Chọn khoảng thời gian:</label>
+                <select id="timePeriod" class="form-control" onchange="fetchUsageStatistics()">
+                    <option value="daily" selected>Theo ngày</option>
+                    <option value="weekly">Theo tuần</option>
+                    <option value="monthly">Theo tháng</option>
+                    <option value="yearly">Theo năm</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <canvas id="usageChart" width="400" height="200"></canvas>
+            </div>
+            <div class="col-md-6">
+                <canvas id="timeChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+
+        <button id="backBtn" class="btn btn-primary mt-4">Quay lại</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        let usageChart; // Biến toàn cục cho biểu đồ sử dụng
+        let timeChart; // Biến toàn cục cho biểu đồ theo thời gian
+
+        async function fetchUsageStatistics() {
+            try {
+                const accessLogsResponse = await fetch('/access-logs');
+                const accessLogs = await accessLogsResponse.json();
+
+                const usersResponse = await fetch('/users');
+                const users = await usersResponse.json();
+
+                // Hiển thị số lượng người dùng và số lần mở cửa
+                document.getElementById('userCount').innerText = users.length;
+                document.getElementById('accessCount').innerText = accessLogs.length;
+
+                const usageCount = {};
+                const timeCount = {};
+                const timePeriod = document.getElementById('timePeriod').value;
+
+                accessLogs.forEach(log => {
+                    const userName = log.name;
+
+                    // Chuyển đổi định dạng access_time
+                    const [time, date] = log.access_time.split(' ');
+                    const [hour, minute, second] = time.split(':');
+                    const [day, month, year] = date.split('/');
+
+                    // Tạo đối tượng Date từ các phần đã tách
+                    const formattedTime = new Date(year, month - 1, day, hour, minute, second); // month - 1 vì tháng bắt đầu từ 0
+
+                    // Kiểm tra nếu formattedTime là hợp lệ
+                    if (isNaN(formattedTime.getTime())) {
+                        console.error('Invalid date:', log.access_time);
+                        return; // Bỏ qua log không hợp lệ
+                    }
+
+                    const key = timePeriod === 'weekly' ? getWeek(formattedTime) :
+                        timePeriod === 'monthly' ? formattedTime.getFullYear() + '-' + (formattedTime.getMonth() + 1) :
+                            timePeriod === 'yearly' ? formattedTime.getFullYear() :
+                                formattedTime.toISOString().split('T')[0]; // Theo ngày
+
+                    // Đếm số lần mở cửa cho từng người dùng
+                    usageCount[userName] = (usageCount[userName] || 0) + 1;
+                    timeCount[key] = (timeCount[key] || 0) + 1;
+                });
+
+                // Hủy biểu đồ cũ nếu tồn tại
+                if (usageChart) {
+                    usageChart.destroy();
+                }
+
+                // Chuẩn bị dữ liệu cho biểu đồ người dùng
+                const labels = users.map(user => user.name);
+                const data = labels.map(label => usageCount[label] || 0);
+
+                const ctxUsage = document.getElementById('usageChart').getContext('2d');
+                usageChart = new Chart(ctxUsage, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Số lần mở cửa',
+                            data: data,
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1,
+                                    callback: function (value) {
+                                        return Number.isInteger(value) ? value : '';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Hủy biểu đồ cũ nếu tồn tại
+                if (timeChart) {
+                    timeChart.destroy();
+                }
+
+                // Chuẩn bị dữ liệu cho biểu đồ theo thời gian
+                const timeLabels = Object.keys(timeCount);
+                const timeData = timeLabels.map(label => timeCount[label]);
+
+                const ctxTime = document.getElementById('timeChart').getContext('2d');
+                timeChart = new Chart(ctxTime, {
+                    type: 'line',
+                    data: {
+                        labels: timeLabels,
+                        datasets: [{
+                            label: 'Số lần mở cửa theo khoảng thời gian',
+                            data: timeData,
+                            fill: false,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1,
+                                    callback: function (value) {
+                                        return Number.isInteger(value) ? value : '';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+
+        function getWeek(date) {
+            const start = new Date(date.getFullYear(), 0, 1);
+            const weekNumber = Math.ceil((((date - start) / 86400000) + start.getDay() + 1) / 7);
+            return date.getFullYear() + '-W' + weekNumber;
+        }
+
+        document.getElementById('backBtn').addEventListener('click', () => {
+            window.location.href = 'index.html'; // Quay lại trang chính
+        });
+
+        // Khởi động thống kê khi load trang
+        window.onload = fetchUsageStatistics;
+    </script>
+</body>
+
+</html>
